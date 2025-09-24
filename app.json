@@ -1,12 +1,7 @@
 {
   "expo": {
-<<<<<<< HEAD
-    "name": "BusDriverTrackerExpo",
-    "slug": "BusDriverTrackerExpo",
-=======
     "name": "UserExpo",
     "slug": "UserExpo",
->>>>>>> b0a2188 (Initial commit)
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -18,12 +13,6 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-<<<<<<< HEAD
-      "supportsTablet": true
-    },
-    "android": {
-      "permissions": ["ACCESS_COARSE_LOCATION","ACCESS_FINE_LOCATION","ACCESS_BACKGROUND_LOCATION"],
-=======
       "config": {
         "googleMapsApiKey": "AIzaSyCBWIootY9hF95zmji4uUnhaRpdXtv55cY"
       },
@@ -35,7 +24,6 @@
           "apiKey": "AIzaSyCBWIootY9hF95zmji4uUnhaRpdXtv55cY"
         }
       },
->>>>>>> b0a2188 (Initial commit)
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
@@ -46,8 +34,4 @@
       "favicon": "./assets/favicon.png"
     }
   }
-<<<<<<< HEAD
 }
-=======
-}
->>>>>>> b0a2188 (Initial commit)

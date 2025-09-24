@@ -1,8 +1,4 @@
 // firebaseConfig.js
-<<<<<<< HEAD
-// Firebase v9 modular SDK (Realtime Database)
-=======
->>>>>>> b0a2188 (Initial commit)
 import { initializeApp } from "firebase/app";
 import { getDatabase } from "firebase/database";
 
