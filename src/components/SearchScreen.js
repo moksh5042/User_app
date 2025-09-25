@@ -1,54 +1,4 @@
-// import React, { useEffect, useState } from "react";
-// import { View, TextInput, FlatList, Text, TouchableOpacity, StyleSheet } from "react-native";
-// import { subscribeToBuses } from "../services/firebaseService";
-
-// export default function SearchScreen({ navigation }) {
-//   const [drivers, setDrivers] = useState({});
-//   const [query, setQuery] = useState("");
-
-//   useEffect(() => {
-//     const unsub = subscribeToBuses(setDrivers);
-//     return () => unsub();
-//   }, []);
-
-//   const filtered = Object.entries(drivers).filter(([driverId]) =>
-//     driverId.toLowerCase().includes(query.toLowerCase())
-//   );
-
-//   return (
-//     <View style={styles.container}>
-//       <TextInput
-//         placeholder="Search by Driver ID"
-//         value={query}
-//         onChangeText={setQuery}
-//         style={styles.input}
-//       />
-//       <FlatList
-//         data={filtered}
-//         keyExtractor={([driverId]) => driverId}
-//         renderItem={({ item: [driverId, data] }) => (
-//           <TouchableOpacity
-//             style={styles.card}
-//             onPress={() => navigation.navigate("DriverDetail", { driverId })}
-//           >
-//             <Text style={styles.title}>{driverId}</Text>
-//             <Text>{`Lat: ${data.lat?.toFixed(3)} | Lng: ${data.lng?.toFixed(3)}`}</Text>
-//           </TouchableOpacity>
-//         )}
-//       />
-//     </View>
-//   );
-// }
-
-// const styles = StyleSheet.create({
-//   container: { flex: 1, padding: 16 },
-//   input: { borderWidth: 1, borderColor: "#ccc", padding: 8, marginBottom: 12, borderRadius: 6 },
-//   card: { padding: 12, borderBottomWidth: 1, borderColor: "#eee" },
-//   title: { fontWeight: "bold", fontSize: 16 },
-// });
-
-
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from "react";
 import {
   View,
   Text,
@@ -57,91 +7,94 @@ import {
   ScrollView,
   Modal,
   StatusBar,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { db } from "../../firebaseConfig";
+import { ref, onValue } from "firebase/database";
 
 const SearchScreen = ({ navigation }) => {
-  const [fromStop, setFromStop] = useState('');
-  const [toStop, setToStop] = useState('');
+  const [fromStop, setFromStop] = useState("");
+  const [toStop, setToStop] = useState("");
   const [showFromModal, setShowFromModal] = useState(false);
   const [showToModal, setShowToModal] = useState(false);
+  const [allRoutes, setAllRoutes] = useState({});
+  const [buses, setBuses] = useState({});
   const [searchResults, setSearchResults] = useState([]);
 
-  // Bus stops data
-  const busStops = [
-    'Main Bus Station',
-    'City Center Mall',
-    'University Gate',
-    'Hospital Junction',
-    'Railway Station',
-    'Airport Road',
-    'Industrial Area',
-    'Sports Complex',
-    'Shopping Plaza',
-    'Government Office',
-  ];
+  /** 🔹 Load all routes */
+  useEffect(() => {
+    const routesRef = ref(db, "routes");
+    return onValue(routesRef, (snap) => {
+      if (snap.exists()) setAllRoutes(snap.val());
+    });
+  }, []);
 
-  // Mock route data
-  const mockRoutes = {
-    'Railway Station-Sports Complex': [
-      {
-        id: 1,
-        routes: [
-          { name: 'Route 1 - City Center', color: '#FF6B35', transfer: 'Main Bus Station' },
-          { name: 'Route 2 - University', color: '#4A90E2', transfer: null }
-        ]
-      },
-      {
-        id: 2,
-        routes: [
-          { name: 'Route 1 - City Center', color: '#FF6B35', transfer: 'Main Bus Station' },
-          { name: 'Route 4 - Airport', color: '#8E44AD', transfer: null }
-        ]
-      }
-    ]
-  };
+  /** 🔹 Load live buses */
+  useEffect(() => {
+    const busesRef = ref(db, "buses");
+    return onValue(busesRef, (snap) => {
+      if (snap.exists()) setBuses(snap.val());
+      else setBuses({});
+    });
+  }, []);
 
-  const handleFromSelect = (stop) => {
-    setFromStop(stop);
-    setShowFromModal(false);
-  };
+  /** 🔹 Build stop list */
+  const busStops = useMemo(() => {
+    const stops = [];
+    Object.values(allRoutes).forEach((stopsObj) => {
+      Object.values(stopsObj).forEach((s) => {
+        if (s && s.name) stops.push(s.name);
+      });
+    });
+    return [...new Set(stops)];
+  }, [allRoutes]);
 
-  const handleToSelect = (stop) => {
-    setToStop(stop);
-    setShowToModal(false);
-  };
-
+  /** 🔹 Search routes */
   const searchRoutes = () => {
-    if (fromStop && toStop) {
-      const routeKey = `${fromStop}-${toStop}`;
-      const results = mockRoutes[routeKey] || [];
-      setSearchResults(results);
-    }
+    if (!fromStop || !toStop) return;
+    const matches = [];
+
+    Object.entries(allRoutes).forEach(([routeId, stopsObj]) => {
+      const stopsArr = Object.entries(stopsObj)
+        .sort(([a], [b]) => parseInt(a.split("_")[1]) - parseInt(b.split("_")[1]))
+        .map(([_, val]) => val);
+
+      const stopNames = stopsArr.map((s) => s.name);
+      const fromIndex = stopNames.indexOf(fromStop);
+      const toIndex = stopNames.indexOf(toStop);
+
+      if (fromIndex !== -1 && toIndex !== -1 && fromIndex < toIndex) {
+        const busesOnRoute = Object.entries(buses)
+          .filter(([_, b]) => b.route === routeId)
+          .map(([busId, b]) => ({ id: busId, ...b }));
+
+        matches.push({
+          id: routeId,
+          name: `Route ${routeId.toUpperCase()}`,
+          stops: stopsArr, // full objects with name, lat, lng
+          start: stopNames[0],
+          end: stopNames[stopNames.length - 1],
+          buses: busesOnRoute,
+        });
+      }
+    });
+
+    setSearchResults(matches);
   };
 
   const swapStops = () => {
-    const temp = fromStop;
     setFromStop(toStop);
-    setToStop(temp);
+    setToStop(fromStop);
   };
 
   const renderStopModal = (visible, onClose, onSelect, title) => (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      transparent={true}
-      onRequestClose={onClose}
-    >
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <View style={styles.modalOverlay}>
         <View style={styles.modalContent}>
           <Text style={styles.modalTitle}>{title}</Text>
           <ScrollView>
             {busStops.map((stop, index) => (
-              <TouchableOpacity
-                key={index}
-                style={styles.stopItem}
-                onPress={() => onSelect(stop)}
-              >
+              <TouchableOpacity key={index} style={styles.stopItem} onPress={() => onSelect(stop)}>
                 <Text style={styles.stopText}>{stop}</Text>
               </TouchableOpacity>
             ))}
@@ -151,50 +104,64 @@ const SearchScreen = ({ navigation }) => {
     </Modal>
   );
 
-  const renderRouteResult = (routeGroup, index) => (
-    <View key={index} style={styles.routeCard}>
-      {routeGroup.routes.map((route, routeIndex) => (
-        <View key={routeIndex} style={styles.routeItem}>
-          <View style={[styles.routeIndicator, { backgroundColor: route.color }]} />
-          <View style={styles.routeInfo}>
-            <Text style={styles.routeName}>{route.name}</Text>
-            {route.transfer && (
-              <Text style={styles.transferText}>Transfer at {route.transfer}</Text>
-            )}
-          </View>
+  const renderRouteResult = (route, idx) => (
+    <View key={idx} style={styles.routeCard}>
+      <Text style={styles.routeName}>{route.name}</Text>
+      <Text style={styles.routeStops}>
+        {route.start} → {route.end}
+      </Text>
+      <Text style={styles.waypoints}>
+        Path: {route.stops.map((s) => s.name).join(" → ")}
+      </Text>
+
+      {route.buses && route.buses.length > 0 ? (
+        <View style={{ marginTop: 10 }}>
+          <Text style={{ fontWeight: "600", marginBottom: 5 }}>Live Buses:</Text>
+          {route.buses.map((b) => (
+            <TouchableOpacity
+              key={b.id}
+              onPress={() =>
+                navigation.navigate("RouteDetails", {
+                  routeId: route.id,
+                  routeData: route,
+                  busId: b.id,
+                })
+              }
+            >
+              <Text style={{ color: "#2196F3" }}>
+                🚌 {b.id} @ ({b.lat.toFixed(3)}, {b.lng.toFixed(3)})
+              </Text>
+            </TouchableOpacity>
+          ))}
         </View>
-      ))}
+      ) : (
+        <Text style={{ marginTop: 8, color: "gray" }}>No buses currently on this route</Text>
+      )}
     </View>
   );
 
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#fff" />
-      
-      {/* From Section */}
+
+      {/* From Stop */}
       <View style={styles.section}>
         <Text style={styles.sectionLabel}>From</Text>
-        <TouchableOpacity
-          style={styles.dropdown}
-          onPress={() => setShowFromModal(true)}
-        >
+        <TouchableOpacity style={styles.dropdown} onPress={() => setShowFromModal(true)}>
           <Text style={[styles.dropdownText, !fromStop && styles.placeholder]}>
-            {fromStop || 'Select source stop'}
+            {fromStop || "Select source stop"}
           </Text>
           <Text style={styles.dropdownArrow}>▼</Text>
         </TouchableOpacity>
       </View>
 
-      {/* To Section */}
+      {/* To Stop */}
       <View style={styles.section}>
         <Text style={styles.sectionLabel}>To</Text>
         <View style={styles.toContainer}>
-          <TouchableOpacity
-            style={styles.dropdownWithSwap}
-            onPress={() => setShowToModal(true)}
-          >
+          <TouchableOpacity style={styles.dropdownWithSwap} onPress={() => setShowToModal(true)}>
             <Text style={[styles.dropdownText, !toStop && styles.placeholder]}>
-              {toStop || 'Select destination stop'}
+              {toStop || "Select destination stop"}
             </Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.swapButton} onPress={swapStops}>
@@ -213,168 +180,99 @@ const SearchScreen = ({ navigation }) => {
       {/* Results */}
       {searchResults.length > 0 && (
         <ScrollView style={styles.resultsContainer}>
-          {searchResults.map((routeGroup, index) => renderRouteResult(routeGroup, index))}
+          {searchResults.map(renderRouteResult)}
         </ScrollView>
       )}
 
-      {/* Modals */}
-      {renderStopModal(
-        showFromModal,
-        () => setShowFromModal(false),
-        handleFromSelect,
-        'Select source stop'
-      )}
-      
-      {renderStopModal(
-        showToModal,
-        () => setShowToModal(false),
-        handleToSelect,
-        'Select destination stop'
-      )}
+      {/* Stop Modals */}
+      {renderStopModal(showFromModal, () => setShowFromModal(false), setFromStop, "Select source stop")}
+      {renderStopModal(showToModal, () => setShowToModal(false), setToStop, "Select destination stop")}
     </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f8f9fa',
-    paddingHorizontal: 20,
-  },
-  section: {
-    marginBottom: 20,
-  },
-  sectionLabel: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 8,
-  },
+  container: { flex: 1, backgroundColor: "#f8f9fa", paddingHorizontal: 20 },
+  section: { marginBottom: 20 },
+  sectionLabel: { fontSize: 16, fontWeight: "600", color: "#333", marginBottom: 8 },
   dropdown: {
-    backgroundColor: '#fff',
+    backgroundColor: "#fff",
     borderRadius: 8,
     padding: 16,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     borderWidth: 1,
-    borderColor: '#e0e0e0',
+    borderColor: "#e0e0e0",
   },
   dropdownWithSwap: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: "#fff",
     borderRadius: 8,
     padding: 16,
     borderWidth: 1,
-    borderColor: '#e0e0e0',
+    borderColor: "#e0e0e0",
   },
-  dropdownText: {
-    fontSize: 16,
-    color: '#333',
-  },
-  placeholder: {
-    color: '#999',
-  },
-  dropdownArrow: {
-    color: '#666',
-    fontSize: 12,
-  },
-  toContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  swapButton: {
-    marginLeft: 10,
-  },
+  dropdownText: { fontSize: 16, color: "#333" },
+  placeholder: { color: "#999" },
+  dropdownArrow: { color: "#666", fontSize: 12 },
+  toContainer: { flexDirection: "row", alignItems: "center" },
+  swapButton: { marginLeft: 10 },
   swapIcon: {
     width: 48,
     height: 48,
-    backgroundColor: '#e0e0e0',
+    backgroundColor: "#e0e0e0",
     borderRadius: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
   },
-  swapText: {
-    fontSize: 20,
-    color: '#666',
-  },
+  swapText: { fontSize: 20, color: "#666" },
   searchButton: {
-    backgroundColor: '#2196F3',
+    backgroundColor: "#2196F3",
     borderRadius: 8,
     padding: 16,
-    alignItems: 'center',
+    alignItems: "center",
     marginBottom: 20,
   },
-  searchButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  resultsContainer: {
-    flex: 1,
-  },
+  searchButtonText: { color: "#fff", fontSize: 16, fontWeight: "600" },
+  resultsContainer: { flex: 1 },
   routeCard: {
-    backgroundColor: '#fff',
+    backgroundColor: "#fff",
     borderRadius: 12,
     padding: 16,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: '#e0e0e0',
+    borderColor: "#e0e0e0",
   },
-  routeItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  routeIndicator: {
-    width: 4,
-    height: 40,
-    borderRadius: 2,
-    marginRight: 12,
-  },
-  routeInfo: {
-    flex: 1,
-  },
-  routeName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 4,
-  },
-  transferText: {
-    fontSize: 14,
-    color: '#FF9500',
-    fontStyle: 'italic',
-  },
+  routeName: { fontSize: 16, fontWeight: "600", color: "#333", marginBottom: 4 },
+  routeStops: { fontSize: 14, color: "#555", marginBottom: 4 },
+  waypoints: { fontSize: 13, color: "#777", fontStyle: "italic" },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "center",
+    alignItems: "center",
   },
   modalContent: {
-    backgroundColor: '#fff',
+    backgroundColor: "#fff",
     borderRadius: 12,
     padding: 20,
-    width: '90%',
-    maxHeight: '70%',
+    width: "90%",
+    maxHeight: "70%",
   },
   modalTitle: {
     fontSize: 18,
-    fontWeight: '600',
-    color: '#333',
+    fontWeight: "600",
+    color: "#333",
     marginBottom: 20,
-    textAlign: 'left',
+    textAlign: "left",
   },
   stopItem: {
     paddingVertical: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    borderBottomColor: "#f0f0f0",
   },
-  stopText: {
-    fontSize: 16,
-    color: '#333',
-  },
+  stopText: { fontSize: 16, color: "#333" },
 });
 
 export default SearchScreen;
